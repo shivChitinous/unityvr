@@ -353,7 +353,9 @@ def posDfFromLog(dat, posDfKey='attemptedTranslation', fictracSubject=None, igno
 
 
 def replayPosDfFromLog(dat, enforce_cm=False):
-    """Extract position data from replay logs (worldPositionReplay/worldPositionAttempt)."""
+    """Extract position data from replay logs.
+    Primary (x, y, angle) = fly's attempted position (behavioral output).
+    Secondary (replayed_x, replayed_y, replayed_angle) = what was displayed on screen."""
     replayKeys = ['worldPositionReplay']
     matching = [s for s in dat if any(key in s for key in replayKeys)]
 
@@ -371,16 +373,22 @@ def replayPosDfFromLog(dat, enforce_cm=False):
         framedat = {
             'frame': match['frame'],
             'time': match['timeSecs'],
-            'x': match['worldPositionReplay']['x'] / gainVal * convf,
-            'y': match['worldPositionReplay']['z'] / gainVal * convf,
-            'angle': (-match['worldRotationDegsReplay']['y']) % 360,
+            # What was displayed on screen (replay)
+            'replayed_x': match['worldPositionReplay']['x'] / gainVal * convf,
+            'replayed_y': match['worldPositionReplay']['z'] / gainVal * convf,
+            'replayed_angle': (-match['worldRotationDegsReplay']['y']) % 360,
         }
-        # Include attempt position if present
+        # Primary: fly's attempted position (behavioral output)
         if 'worldPositionAttempt' in match:
-            framedat['x_attempt'] = match['worldPositionAttempt']['x'] / gainVal * convf
-            framedat['y_attempt'] = match['worldPositionAttempt']['z'] / gainVal * convf
+            framedat['x'] = match['worldPositionAttempt']['x'] / gainVal * convf
+            framedat['y'] = match['worldPositionAttempt']['z'] / gainVal * convf
+        else:
+            framedat['x'] = np.nan
+            framedat['y'] = np.nan
         if 'worldRotationDegsAttempt' in match:
-            framedat['angle_attempt'] = (-match['worldRotationDegsAttempt']['y']) % 360
+            framedat['angle'] = (-match['worldRotationDegsAttempt']['y']) % 360
+        else:
+            framedat['angle'] = np.nan
         entries[entry] = pd.Series(framedat).to_frame().T
 
     if len(entries) > 0:

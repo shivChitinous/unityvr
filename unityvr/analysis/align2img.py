@@ -55,7 +55,8 @@ def debugAlignmentPlots(uvrDat, imgMetadat, imgInd, volFramePos, lims=[0,100]):
 
     # sanity check to see the difference in frame start times
     fps = imgMetadat['fpsscan'] #frame rate of scanimage
-    sampling_rate = len(uvrDat.nidDf.dropna())/(uvrDat.nidDf.dropna()['time'].iloc[-1]-uvrDat.nidDf.dropna()['time'].iloc[0])
+    nid_valid = uvrDat.nidDf.dropna(subset=['time'])
+    sampling_rate = len(nid_valid)/(nid_valid['time'].iloc[-1]-nid_valid['time'].iloc[0])
     axs[2].axvline(int(np.round(sampling_rate/fps)), color='r', linestyle='-')
     axs[2].axvline(int(np.round(sampling_rate/fps))+1, color='r', linestyle='--')
     axs[2].axvline(int(np.round(sampling_rate/fps))-1, color='r', linestyle='--')
@@ -102,7 +103,7 @@ def generateUnityExpDf(imgVolumeTimes, uvrDat, imgMetadat, suppressDepugPlot = F
      #use volume start frames to downsample unityDfs
      for i,unityDfstr in enumerate(unityDfs):
           unityDf = getattr(uvrDat,unityDfstr)
-          if (frameStr in unityDf):
+          if (frameStr in unityDf) and len(unityDf) > 0:
                if len(unityDf[frameStr].unique())==len(unityDf[frameStr]):
                     volFrameId = np.array([np.where(volFrame[i] == unityDf.frame.values)[0][0] for i in range(len(volFrame)) if volFrame[i] in unityDf.frame.values])
                     # try: volFrameId = np.array([np.where(volFrame[i] == unityDf.frame.values)[0][0] for i in range(len(volFrame))])
@@ -270,7 +271,7 @@ def addImagingTimeToUvrDat(imgDataTime, uvrDat, imgMetadat, timeStr = 'volumes [
         if dataframeAppend in f:
             
             unityDf = getattr(uvrDat,f)
-            if frameStr in unityDf:
+            if frameStr in unityDf and len(unityDf) > 0:
                 unityDf[timeStr] = interpF(unityDf['frame'])
                 setattr(uvrDat,f,unityDf)
     return uvrDat
