@@ -87,14 +87,57 @@ class unityVRexperiment:
 
         return savepath
 
+def isReplayLog(dat):
+    """Detect replay log via isReplaySession keypair."""
+    replayKeys = ['isReplaySession']
+    matching = [s for s in dat if any(key in s for key in replayKeys)]
+    return len(matching) > 0 and matching[0].get("isReplaySession", False)
+
+
 # constructor for unityVRexperiment
-def constructUnityVRexperiment(dirName,fileName,computePDtrace = True,enforce_cm = False,**kwargs):
+def constructUnityVRexperiment(dirName,fileName,enforce_cm = False,colKeyPairs={'imgFrameTrigger':'imgfsig', 'tracePD':'pdsig'},**kwargs):
 
     dat = openUnityLog(dirName, fileName)
 
     metadat = makeMetaDict(dat, fileName)
     objDf = objDfFromLog(dat, enforce_cm=enforce_cm)
-    posDf, ftDf, nidDf = timeseriesDfFromLog(dat, computePDtrace, enforce_cm=enforce_cm, **kwargs)
+
+    isReplay = metadat.get('isReplay', False)
+
+    if isReplay:
+        # Replay logs use worldPositionReplay keys instead of attemptedTranslation/worldPosition
+        posDf = replayPosDfFromLog(dat, enforce_cm=enforce_cm)
+        ftDf = pd.DataFrame(columns=ftDfCols)
+        dtDf = dtDfFromLog(dat)
+        try:
+            pdDf = pdDfFromLog(dat, colKeyPairs=colKeyPairs)
+        except:
+            pdDf = pd.DataFrame()
+
+        if len(posDf) > 0:
+            posDf.time = posDf.time - posDf.time[0]
+        if dtDf is not None and len(dtDf) > 0:
+            dtDf.time = dtDf.time - dtDf.time[0]
+        if len(pdDf) > 0:
+            pdDf.time = pdDf.time - pdDf.time[0]
+
+        if dtDf is not None and len(dtDf) > 0 and len(posDf) > 0:
+            posDf = pd.merge(dtDf, posDf, on="frame", how='outer').rename(
+                columns={'time_x':'time'}).drop(['time_y'], axis=1)
+
+        if len(pdDf) > 0 and dtDf is not None and len(dtDf) > 0:
+            nidDf = pd.merge(dtDf, pdDf, on="frame", how='left').rename(
+                columns={'time_x':'time'}).drop(['time_y'], axis=1)
+            if 'pdsig' in nidDf.columns:
+                nidDf["pdFilt"] = nidDf.pdsig.values
+                nidDf.pdFilt.values[np.isfinite(nidDf.pdsig.values)] = medfilt(
+                    nidDf.pdsig.values[np.isfinite(nidDf.pdsig.values)])
+            nidDf = generateInterTime(nidDf)
+        else:
+            nidDf = pd.DataFrame()
+    else:
+        posDf, ftDf, nidDf = timeseriesDfFromLog(dat, colKeyPairs=colKeyPairs, enforce_cm=enforce_cm, **kwargs)
+
     texDf = texDfFromLog(dat)
     vidDf = vidDfFromLog(dat)
     attmptDf = attmptDfFromLog(dat, enforce_cm=enforce_cm)
@@ -190,7 +233,7 @@ def makeMetaDict(dat, fileName):
         except: translationalGain = 1.0
 
     matching = [s for s in dat if "refreshRateHz" in s]
-    setFrameRate = matching[0]["refreshRateHz"]
+    setFrameRate = matching[0]["refreshRateHz"] if len(matching) > 0 else 0
 
     metadata = {
         'expid': metadat[0],
@@ -206,7 +249,8 @@ def makeMetaDict(dat, fileName):
         'setFrameRate': setFrameRate,
         'notes': metadat[5],
         'temperature': metadat[6],
-        'angle_convention':"right-handed"
+        'angle_convention':"right-handed",
+        'isReplay': isReplayLog(dat)
     }
 
     return metadata
@@ -308,6 +352,52 @@ def posDfFromLog(dat, posDfKey='attemptedTranslation', fictracSubject=None, igno
         return pd.DataFrame()
 
 
+def replayPosDfFromLog(dat, enforce_cm=False):
+    """Extract position data from replay logs.
+    Primary (x, y, angle) = fly's attempted position (behavioral output).
+    Secondary (replayed_x, replayed_y, replayed_angle) = what was displayed on screen."""
+    replayKeys = ['worldPositionReplay']
+    matching = [s for s in dat if any(key in s for key in replayKeys)]
+
+    matchingRad = [s for s in dat if "ficTracBallRadius" in s]
+    if len(matchingRad) > 0 and 'translationalGain' in matchingRad[0]:
+        gainVal = matchingRad[0]['translationalGain']
+    else:
+        gainVal = 1.0
+    if gainVal == 0:
+        gainVal = 1.0
+    convf = 10.0 if enforce_cm else 1.0
+
+    entries = [None] * len(matching)
+    for entry, match in enumerate(matching):
+        framedat = {
+            'frame': match['frame'],
+            'time': match['timeSecs'],
+            # What was displayed on screen (replay)
+            'replayed_x': match['worldPositionReplay']['x'] / gainVal * convf,
+            'replayed_y': match['worldPositionReplay']['z'] / gainVal * convf,
+            'replayed_angle': (-match['worldRotationDegsReplay']['y']) % 360,
+        }
+        # Primary: fly's attempted position (behavioral output)
+        if 'worldPositionAttempt' in match:
+            framedat['x'] = match['worldPositionAttempt']['x'] / gainVal * convf
+            framedat['y'] = match['worldPositionAttempt']['z'] / gainVal * convf
+        else:
+            framedat['x'] = np.nan
+            framedat['y'] = np.nan
+        if 'worldRotationDegsAttempt' in match:
+            framedat['angle'] = (-match['worldRotationDegsAttempt']['y']) % 360
+        else:
+            framedat['angle'] = np.nan
+        entries[entry] = pd.Series(framedat).to_frame().T
+
+    if len(entries) > 0:
+        print('correcting for Unity angle convention.')
+        return pd.concat(entries, ignore_index=True)
+    else:
+        return pd.DataFrame()
+
+
 def ftDfFromLog(dat):
     # get fictrac data
     matching = [s for s in dat if "ficTracDeltaRotationVectorLab" in s]
@@ -342,7 +432,8 @@ def attmptDfFromLog(dat, enforce_cm = False):
                         'dyattempt_ft': -match['fictracAttempt']['x']*matchingRad[0]['ficTracBallRadius']*convf, 
                         #scale by ball radius but not by translational gain to get true x,y in unity units (dm or if enforced cm), rightward motion
                         'dxattempt_ft': match['fictracAttempt']['y']*matchingRad[0]['ficTracBallRadius']*convf, #forward motion
-                        'angleattempt_ft': (-np.rad2deg(match['fictracAttempt']['z']))%360} #convert to degrees and flip to align with unity convention
+                        'angleattempt_ft': np.rad2deg(match['fictracAttempt']['z'])} #convert to degrees
+                        # This is a conflict from Shivam's UnityVR.   'angleattempt_ft': (-np.rad2deg(match['fictracAttempt']['z']))%360} #convert to degrees and flip to align with unity convention
         entries[entry] = pd.Series(framedat).to_frame().T
 
     if len(entries) > 0:
@@ -397,6 +488,8 @@ def texDfFromLog(dat):
     
     # get texture names
     matchingSessionParams = [s for s in dat if "sessionParameters" in s]
+    if len(matchingSessionParams) == 0:
+        return pd.DataFrame()
     #get texture names
     textureMatches = list(pd.Series([dict(l.split(':', 1) for l in matchingSessionParams[0]['sessionParameters']
     )[m] for m in dict(l.split(':', 1) for l in matchingSessionParams[0]['sessionParameters']
@@ -469,9 +562,7 @@ def tempDfFromLog(dat):
     if len(entries) > 0:
         tempDf = pd.concat(entries,ignore_index = True).groupby('frame').mean().reset_index() #average over multiple temperature readings per unity frame
         dtDf = dtDfFromLog(dat) #get the frame times
-        if len(dtDf)>0: 
-            tempDf = pd.merge(dtDf, tempDf, on="frame", how='outer')
-            tempDf.time = tempDf.time-tempDf.time[0]
+        if len(dtDf)>0: tempDf = pd.merge(dtDf, tempDf, on="frame", how='outer')
         return tempDf
     else:
         print('No temperature data was recorded.')
@@ -500,9 +591,13 @@ def timeseriesDfFromLog(dat, colKeyPairs={'imgFrameTrigger':'imgfsig', 'tracePD'
     try: pdDf = pdDfFromLog(dat, colKeyPairs=colKeyPairs)
     except: print("No analog input data was recorded.")
 
+
+    
     if len(posDf) > 0: posDf.time = posDf.time-posDf.time[0]
     if len(dtDf) > 0: dtDf.time = dtDf.time-dtDf.time[0]
     if len(pdDf) > 0: pdDf.time = pdDf.time-pdDf.time[0]
+    if ((len(posDf)>0)&(len(pdDf)>0)&(len(dtDf)>0)):
+        print('pdDf time:', pdDf.time[0], 'posDf time:', posDf.time[0], 'dtDf time:', dtDf.time[0]) 
 
     if len(ftDf) > 0:
         ftDf.ficTracTReadMs = ftDf.ficTracTReadMs-ftDf.ficTracTReadMs[0]
