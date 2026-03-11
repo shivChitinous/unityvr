@@ -88,13 +88,13 @@ class unityVRexperiment:
         return savepath
 
 # constructor for unityVRexperiment
-def constructUnityVRexperiment(dirName,fileName,computePDtrace = True,enforce_cm = False,**kwargs):
+def constructUnityVRexperiment(dirName,fileName,enforce_cm = False,colKeyPairs=None,**kwargs):
 
     dat = openUnityLog(dirName, fileName)
 
     metadat = makeMetaDict(dat, fileName)
     objDf = objDfFromLog(dat, enforce_cm=enforce_cm)
-    posDf, ftDf, nidDf = timeseriesDfFromLog(dat, computePDtrace, enforce_cm=enforce_cm, **kwargs)
+    posDf, ftDf, nidDf = timeseriesDfFromLog(dat, colKeyPairs=colKeyPairs, enforce_cm=enforce_cm, **kwargs)
     texDf = texDfFromLog(dat)
     vidDf = vidDfFromLog(dat)
     attmptDf = attmptDfFromLog(dat, enforce_cm=enforce_cm)
@@ -499,8 +499,10 @@ def ftTrajDfFromLog(directory, filename):
     ftTrajDf = pd.read_csv(directory+"/"+filename,usecols=cols,names=colnames)
     return ftTrajDf
 
-def timeseriesDfFromLog(dat, colKeyPairs={'imgFrameTrigger':'imgfsig', 'tracePD':'pdsig'}, **posDfKeyWargs):
-    
+def timeseriesDfFromLog(dat, colKeyPairs=None, **posDfKeyWargs):
+
+    if colKeyPairs is None:
+        colKeyPairs = {'imgFrameTrigger':'imgfsig', 'tracePD':'pdsig'}
 
     posDf = pd.DataFrame(columns=posDfCols)
     ftDf = pd.DataFrame(columns=ftDfCols)
