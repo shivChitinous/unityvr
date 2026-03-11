@@ -244,9 +244,9 @@ def objDfFromLog(dat, enforce_cm = False):
         convf = 10.0
     else:
         convf = 1.0
-    entries = [None]*len(matching)
-    for entry, match in enumerate(matching):
-        framedat = {'name': match['meshGameObjectPath'],
+    rows = []
+    for match in matching:
+        rows.append({'name': match['meshGameObjectPath'],
                     'collider': match['colliderType'],
                     'px': match['worldPosition']['x']/gainVal*convf,
                     'py': match['worldPosition']['z']/gainVal*convf,
@@ -256,10 +256,9 @@ def objDfFromLog(dat, enforce_cm = False):
                     'rz': match['worldRotationDegs']['y'],
                     'sx': match['worldScale']['x']/gainVal*convf,
                     'sy': match['worldScale']['z']/gainVal*convf,
-                    'sz': match['worldScale']['y']}
-        entries[entry] = pd.Series(framedat).to_frame().T
-    if len(entries) > 0:
-        return pd.concat(entries,ignore_index = True)
+                    'sz': match['worldScale']['y']})
+    if rows:
+        return pd.DataFrame(rows)
     else:
         return pd.DataFrame()
 
@@ -279,10 +278,10 @@ def posDfFromLog(dat, posDfKey='attemptedTranslation', fictracSubject=None, igno
         convf = 10.0
     else:
         convf = 1.0
-    entries = [None]*len(matching)
-    for entry, match in enumerate(matching):
+    rows = []
+    for match in matching:
         if fictracSubject != 'Integrated':
-            framedat = {'frame': match['frame'],
+            rows.append({'frame': match['frame'],
                         'time': match['timeSecs'],
                         'x': match['worldPosition']['x']/gainVal*convf,
                         'y': match['worldPosition']['z']/gainVal*convf, #axes are named differently in Unity
@@ -291,19 +290,18 @@ def posDfFromLog(dat, posDfKey='attemptedTranslation', fictracSubject=None, igno
                         'dy_ft': match['actualTranslation']['z']/gainVal*convf,
                         'dxattempt_ft': match['attemptedTranslation']['x']/gainVal*convf,
                         'dyattempt_ft': match['attemptedTranslation']['z']/gainVal*convf
-                       }
+                       })
         else:
-            framedat = {'frame': match['frame'],
+            rows.append({'frame': match['frame'],
                             'time': match['timeSecs'],
                             'x': match['worldPosition']['x']/gainVal*convf,
                             'y': match['worldPosition']['z']/gainVal*convf, #axes are named differently in Unity
                             'angle': (-match['worldRotationDegs']['y'])%360, #flip due to left handed convention in Unity
-                        }
-        entries[entry] = pd.Series(framedat).to_frame().T
+                        })
     print('correcting for Unity angle convention.')
 
-    if len(entries) > 0:
-        return  pd.concat(entries,ignore_index = True)
+    if rows:
+        return pd.DataFrame(rows)
     else:
         return pd.DataFrame()
 
@@ -311,18 +309,17 @@ def posDfFromLog(dat, posDfKey='attemptedTranslation', fictracSubject=None, igno
 def ftDfFromLog(dat):
     # get fictrac data
     matching = [s for s in dat if "ficTracDeltaRotationVectorLab" in s]
-    entries = [None]*len(matching)
-    for entry, match in enumerate(matching):
-        framedat = {'frame': match['frame'],
+    rows = []
+    for match in matching:
+        rows.append({'frame': match['frame'],
                         'ficTracTReadMs': match['ficTracTimestampReadMs'],
                         'ficTracTWriteMs': match['ficTracTimestampWriteMs'],
                         'wx_ft': match['ficTracDeltaRotationVectorLab']['x'],
                         'wy_ft': match['ficTracDeltaRotationVectorLab']['y'],
-                        'wz_ft': match['ficTracDeltaRotationVectorLab']['z']}
-        entries[entry] = pd.Series(framedat).to_frame().T
+                        'wz_ft': match['ficTracDeltaRotationVectorLab']['z']})
 
-    if len(entries) > 0:
-        return pd.concat(entries, ignore_index = True)
+    if rows:
+        return pd.DataFrame(rows)
     else:
         return pd.DataFrame()
     
@@ -331,22 +328,21 @@ def attmptDfFromLog(dat, enforce_cm = False):
     # get fictrac data during open loop periods
     matching = [s for s in dat if "fictracAttempt" in s]
     matchingRad = [s for s in dat if "ficTracBallRadius" in s]
-    entries = [None]*len(matching)
     if enforce_cm:
         convf = 10.0
     else:
         convf = 1.0
-    for entry, match in enumerate(matching):
-        framedat = {'frame': match['frame'],
-                    'time': match['timeSecs'], 
-                        'dyattempt_ft': -match['fictracAttempt']['x']*matchingRad[0]['ficTracBallRadius']*convf, 
+    rows = []
+    for match in matching:
+        rows.append({'frame': match['frame'],
+                    'time': match['timeSecs'],
+                        'dyattempt_ft': -match['fictracAttempt']['x']*matchingRad[0]['ficTracBallRadius']*convf,
                         #scale by ball radius but not by translational gain to get true x,y in unity units (dm or if enforced cm), rightward motion
                         'dxattempt_ft': match['fictracAttempt']['y']*matchingRad[0]['ficTracBallRadius']*convf, #forward motion
-                        'angleattempt_ft': (-np.rad2deg(match['fictracAttempt']['z']))%360} #convert to degrees and flip to align with unity convention
-        entries[entry] = pd.Series(framedat).to_frame().T
+                        'angleattempt_ft': (-np.rad2deg(match['fictracAttempt']['z']))%360}) #convert to degrees and flip to align with unity convention
 
-    if len(entries) > 0:
-        return pd.concat(entries, ignore_index = True)
+    if rows:
+        return pd.DataFrame(rows)
     else:
         return pd.DataFrame()
 
@@ -354,15 +350,14 @@ def attmptDfFromLog(dat, enforce_cm = False):
 def dtDfFromLog(dat):
     # get delta time info
     matching = [s for s in dat if "deltaTime" in s]
-    entries = [None]*len(matching)
-    for entry, match in enumerate(matching):
-        framedat = {'frame': match['frame'],
+    rows = []
+    for match in matching:
+        rows.append({'frame': match['frame'],
                     'time': match['timeSecs'],
-                    'dt': match['deltaTime']}
-        entries[entry] = pd.Series(framedat).to_frame().T
+                    'dt': match['deltaTime']})
 
-    if len(entries) > 0:
-        return pd.concat(entries,ignore_index = True)
+    if rows:
+        return pd.DataFrame(rows)
     else:
         return pd.DataFrame()
 
@@ -428,27 +423,26 @@ def texDfFromLog(dat):
     matching = [s for s in dat if "xpos" in s]
     if len(matching) == 0: return pd.DataFrame()
 
-    entries = [None]*len(matching)
+    rows = []
     for entry, match in enumerate(matching):
         if 'ypos' in match:
-            framedat = {'frame': match['frame'],
+            rows.append({'frame': match['frame'],
                         'time': match['timeSecs'],
                         'xtex': match['xpos'],
                         'ytex': match['ypos'],
                         'texName': textureMatches[entry%len(textureMatches)]
-                        }
+                        })
         else:
-            framedat = {'frame': match['frame'],
+            rows.append({'frame': match['frame'],
                         'time': match['timeSecs'],
                         'xtex': match['xpos'],
                         'ytex': 0,
                         'texName': textureMatches[entry%len(textureMatches)]
-                        }
-        entries[entry] = pd.Series(framedat).to_frame().T
+                        })
 
-    if len(entries) > 0:
+    if rows:
         dtDf = dtDfFromLog(dat)
-        texDf = pd.concat(entries,ignore_index = True)
+        texDf = pd.DataFrame(rows)
         texDf = pd.merge(dtDf, texDf, on=["frame", "time"], how='inner')
         texDf.time = texDf.time-texDf.time[0]
         return texDf[~texDf.duplicated(subset=['frame', 'texName'], keep='last')].reset_index(drop=True)
@@ -461,16 +455,15 @@ def vidDfFromLog(dat):
     matching = [s for s in dat if "backgroundTextureNowInUse" in s]
     if len(matching) == 0: return pd.DataFrame()
 
-    entries = [None]*len(matching)
-    for entry, match in enumerate(matching):
-        framedat = {'frame': match['frame'],
+    rows = []
+    for match in matching:
+        rows.append({'frame': match['frame'],
                     'time': match['timeSecs'],
                     'img': match['backgroundTextureNowInUse'].split('/')[-1],
-                    'duration': match['durationSecs']}
-        entries[entry] = pd.Series(framedat).to_frame().T
+                    'duration': match['durationSecs']})
 
-    if len(entries) > 0:
-        return pd.concat(entries,ignore_index = True)
+    if rows:
+        return pd.DataFrame(rows)
     else:
         return pd.DataFrame()
     
@@ -480,16 +473,15 @@ def tempDfFromLog(dat):
     matching = [s for s in dat if "temperature" in s]
     if len(matching) == 0: return pd.DataFrame()
 
-    entries = [None]*len(matching)
-    for entry, match in enumerate(matching):
-        framedat = {'frame': match['frame'],
+    rows = []
+    for match in matching:
+        rows.append({'frame': match['frame'],
                     'tempReadTime': match['timeSecs'],
                     'temperature': match['temperature']
-                    }
-        entries[entry] = pd.Series(framedat).to_frame().T
-    
-    if len(entries) > 0:
-        tempDf = pd.concat(entries,ignore_index = True).groupby('frame').mean().reset_index() #average over multiple temperature readings per unity frame
+                    })
+
+    if rows:
+        tempDf = pd.DataFrame(rows).groupby('frame').mean().reset_index() #average over multiple temperature readings per unity frame
         dtDf = dtDfFromLog(dat) #get the frame times
         if len(dtDf)>0: 
             tempDf = pd.merge(dtDf, tempDf, on="frame", how='outer')
