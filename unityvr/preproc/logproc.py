@@ -367,15 +367,15 @@ def dtDfFromLog(dat):
         return pd.DataFrame()
 
 ## function to load signals from NI-DAQ
-def pdDfFromLog(dat, colKeyPairs={'imgFrameTrigger':'imgfsig', 'tracePD':'pdsig'}):
+"""def pdDfFromLog(dat, colKeyPairs={'imgFrameTrigger':'imgfsig', 'tracePD':'pdsig'}):
     # get NiDaq signal
     matching = [s for s in dat if any(key in s for key in colKeyPairs)]
     entries = [None]*len(matching)
     for entry, match in enumerate(matching):
-        """framedat = {'frame': match['frame'],
+        framedat = {'frame': match['frame'],
                         'time': match['timeSecs'],
                         'pdsig': match['tracePD'],
-                        'imgfsig': match['imgFrameTrigger']}"""
+                        'imgfsig': match['imgFrameTrigger']}
         framedat = {'frame': match['frame'],
                         'time': match['timeSecs']}
         for key in colKeyPairs:
@@ -390,7 +390,29 @@ def pdDfFromLog(dat, colKeyPairs={'imgFrameTrigger':'imgfsig', 'tracePD':'pdsig'
         pdDf = pd.concat(entries,ignore_index = True)[['frame', 'time']+list(colKeyPairs.values())]#.drop_duplicates()
         return pdDf
     else:
-        return pd.DataFrame()
+        return pd.DataFrame()"""
+
+def pdDfFromLog(dat, colKeyPairs={'imgFrameTrigger': 'imgfsig', 'tracePD': 'pdsig'}):
+    rows = []
+    out_cols = ['frame', 'time'] + list(colKeyPairs.values())
+
+    for match in dat:
+        if not any(key in match for key in colKeyPairs):
+            continue
+
+        row = {
+            'frame': match['frame'],
+            'time': match['timeSecs'],
+        }
+        for key, out_key in colKeyPairs.items():
+            row[out_key] = match.get(key, np.nan)
+
+        rows.append(row)
+
+    if rows:
+        return pd.DataFrame(rows, columns=out_cols)
+    else:
+        return pd.DataFrame(columns=out_cols)
 
 
 def texDfFromLog(dat):
