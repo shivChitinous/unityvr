@@ -387,7 +387,8 @@ def dtDfFromLog(dat):
     else:
         return pd.DataFrame()"""
 
-def pdDfFromLog(dat, colKeyPairs={'imgFrameTrigger': 'imgfsig', 'tracePD': 'pdsig'}):
+def nidRawDfFromLog(dat, colKeyPairs={'imgFrameTrigger': 'imgfsig', 'tracePD': 'pdsig'}):
+    # Extract raw NI-DAQ sampled signals from the log into a dataframe (before merging with frame timing)
     rows = []
     out_cols = ['frame', 'time'] + list(colKeyPairs.values())
 
@@ -505,18 +506,18 @@ def timeseriesDfFromLog(dat, colKeyPairs={'imgFrameTrigger':'imgfsig', 'tracePD'
     ftDf = pd.DataFrame(columns=ftDfCols)
     dtDf = pd.DataFrame(columns=dtDfCols)
 
-    pdDf = pd.DataFrame(columns = ['frame', 'time']+list(colKeyPairs.values())) #['frame','time','pdsig','imgfsig']
+    nidRawDf = pd.DataFrame(columns = ['frame', 'time']+list(colKeyPairs.values())) #['frame','time','pdsig','imgfsig']
 
     posDf = posDfFromLog(dat,**posDfKeyWargs)
     ftDf = ftDfFromLog(dat)
     dtDf = dtDfFromLog(dat)
 
-    try: pdDf = pdDfFromLog(dat, colKeyPairs=colKeyPairs)
+    try: nidRawDf = nidRawDfFromLog(dat, colKeyPairs=colKeyPairs)
     except: print("No analog input data was recorded.")
 
     if len(posDf) > 0: posDf.time = posDf.time-posDf.time[0]
     if len(dtDf) > 0: dtDf.time = dtDf.time-dtDf.time[0]
-    if len(pdDf) > 0: pdDf.time = pdDf.time-pdDf.time[0]
+    if len(nidRawDf) > 0: nidRawDf.time = nidRawDf.time-nidRawDf.time[0]
 
     if len(ftDf) > 0:
         ftDf.ficTracTReadMs = ftDf.ficTracTReadMs-ftDf.ficTracTReadMs[0]
@@ -524,12 +525,12 @@ def timeseriesDfFromLog(dat, colKeyPairs={'imgFrameTrigger':'imgfsig', 'tracePD'
     else:
         print("No fictrac signal was recorded.")
 
-    if len(dtDf) > 0: 
+    if len(dtDf) > 0:
         posDf = pd.merge(dtDf, posDf, on="frame", how='outer').rename(columns={'time_x':'time'}).drop(['time_y'],axis=1)
 
-    if len(pdDf) > 0 and len(dtDf) > 0:
+    if len(nidRawDf) > 0 and len(dtDf) > 0:
 
-        nidDf = pd.merge(dtDf, pdDf, on="frame", how='left').rename(columns={'time_x':'time'}).drop(['time_y'],axis=1)
+        nidDf = pd.merge(dtDf, nidRawDf, on="frame", how='left').rename(columns={'time_x':'time'}).drop(['time_y'],axis=1)
 
         if 'pdsig' in nidDf.columns:
             nidDf["pdFilt"]  = nidDf.pdsig.values
