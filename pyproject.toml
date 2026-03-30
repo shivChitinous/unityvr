@@ -19,6 +19,8 @@ statsmodels = "^0.13.2"
 astropy = "^5.1"
 pyyaml = ">=6.0.1"
 fly2p = "0.2.2"
+nptdms = "^1.10.0"
+plotly = "^6.6.0"
 
 [tool.poetry.dev-dependencies]
 
